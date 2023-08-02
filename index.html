@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Interfaz Web para Calcular Datos</title>
+    <!-- Agrega los enlaces a Bootstrap y jQuery -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <!-- Enlaces a Highcharts -->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/export-data.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+
+
+</head>
+<body>
+<!-- Aquí estará el contenido de la página -->
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <h3 class="text-center">Seleccione una fecha</h3>
+            <form id="fechaForm" class="mt-3" action="API/listado.php" method="POST">
+                <div class="form-group">
+                    <label for="fecha">Fecha:</label>
+                    <input type="date" class="form-control" id="fecha" name="fecha">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Calcular Datos</button>
+            </form>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-10 offset-md-1">
+            <div id="grafica"></div>
+        </div>
+
+        <div class="col-md-10 offset-md-1">
+            <div id="graficaPower"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+    function obtenerDatosPotenciaAjax(fechaSeleccionada) {
+        return $.ajax({
+            url: './API/listado.php',
+            method: 'POST',
+            data: { potencia: true, fecha: fechaSeleccionada },
+            dataType: 'json'
+        });
+    }
+
+    $(document).ready(function() {
+        $("#fechaForm").submit(function(e) {
+            e.preventDefault();
+            var fechaSeleccionada = $("#fecha").val();
+            console.log("Fecha seleccionada: " + fechaSeleccionada);
+
+            $.ajax({
+                url: './API/listado.php',
+                method: 'POST',
+                data: { fecha: fechaSeleccionada },
+                dataType: 'json',
+                success: function(data) {
+                    console.log('Datos recibidos desde el servidor:', data);
+                    var options = {
+                        chart: {
+                            type: 'column' // Cambiar el tipo de gráfico a column
+                        },
+                        title: {
+                            text: 'Gráfica de Energía por Fecha'
+                        },
+                        xAxis: {
+                            type: 'datetime',
+                            title: {
+                                text: 'Fecha'
+                            }
+                        },
+                        yAxis: {
+                            title: {
+                                text: 'Energía (kWh)'
+                            }
+                        },
+                        series: [{
+                            name: 'Energía',
+                            data: data
+                        }]
+                    };
+                    Highcharts.chart('grafica', options);
+                },
+                error: function() {
+                    alert("Error al obtener los datos de energía. Inténtalo de nuevo.");
+                }
+            });
+        });
+    });
+
+
+    $(document).ready(function() {
+        $("#fechaForm").submit(function(e) {
+            e.preventDefault(); // Evitar que el formulario se envíe de forma predeterminada
+            var fechaSeleccionada = $("#fecha").val();
+            console.log("Fecha seleccionada: " + fechaSeleccionada);
+
+            // Realizar la petición AJAX para obtener los datos de energía
+            var energiaAjax = $.ajax({
+                url: './API/listado.php',
+                method: 'POST',
+                data: { fecha: fechaSeleccionada },
+                dataType: 'json'
+            });
+
+            // Realizar la petición AJAX para obtener los datos de potencia
+            var potenciaAjax = obtenerDatosPotenciaAjax(fechaSeleccionada);
+
+            // Cuando ambas peticiones AJAX se completen, mostrar las gráficas
+            $.when(energiaAjax, potenciaAjax).done(function(dataEnergia, dataPotencia) {
+                console.log('Datos de energía recibidos desde el servidor:', dataEnergia);
+                console.log('Datos de potencia recibidos desde el servidor:', dataPotencia);
+
+                // Configurar la primera gráfica de energía
+                var optionsEnergia = {
+                    chart: {
+                        type: 'line'
+                    },
+                    title: {
+                        text: 'Gráfica de Energía por Fecha'
+                    },
+                    xAxis: {
+                        type: 'datetime',
+                        title: {
+                            text: 'Fecha'
+                        }
+                    },
+                    yAxis: {
+                        title: {
+                            text: 'Energía (kWh)'
+                        }
+                    },
+                    series: [{
+                        name: 'Energía',
+                        data: dataEnergia[0]
+                    }]
+                };
+                Highcharts.chart('grafica', optionsEnergia);
+
+                // Configurar la segunda gráfica de potencia
+                Highcharts.addEvent(Highcharts.Point, 'click', function () {
+                    if (this.series.options.className.indexOf('popup-on-click') !== -1) {
+                        const chart = this.series.chart;
+                        const date = Highcharts.dateFormat('%A, %b %e, %Y', this.x);
+                        const text = `<b>${date}</b><br/>${this.y} ${this.series.name}`;
+
+                        const anchorX = this.plotX + this.series.xAxis.pos;
+                        const anchorY = this.plotY + this.series.yAxis.pos;
+                        const align = anchorX < chart.chartWidth - 200 ? 'left' : 'right';
+                        const x = align === 'left' ? anchorX + 10 : anchorX - 10;
+                        const y = anchorY - 30;
+                        if (!chart.sticky) {
+                            chart.sticky = chart.renderer
+                                .label(text, x, y, 'callout',  anchorX, anchorY)
+                                .attr({
+                                    align,
+                                    fill: 'rgba(0, 0, 0, 0.75)',
+                                    padding: 10,
+                                    zIndex: 7 // Above series, below tooltip
+                                })
+                                .css({
+                                    color: 'white'
+                                })
+                                .on('click', function () {
+                                    chart.sticky = chart.sticky.destroy();
+                                })
+                                .add();
+                        } else {
+                            chart.sticky
+                                .attr({ align, text })
+                                .animate({ anchorX, anchorY, x, y }, { duration: 250 });
+                        }
+                    }
+                });
+
+                var optionsPotencia = {
+                    chart: {
+                        type: 'line'
+                    },
+                    title: {
+                        text: 'Gráfica de Potencia por Fecha'
+                    },
+                    xAxis: {
+                        type: 'datetime',
+                        title: {
+                            text: 'Fecha'
+                        }
+                    },
+                    yAxis: {
+                        title: {
+                            text: 'Potencia'
+                        }
+                    },
+                    series: [
+                        {
+                            name: 'Power1',
+                            data: dataPotencia[0].power1,
+                            color: 'blue',
+                            className: 'popup-on-click', // Añadir la clase para hacer los puntos clicables
+                            marker: {
+                                lineWidth: 1
+                            }
+                        },
+                        {
+                            name: 'Power2',
+                            data: dataPotencia[0].power2,
+                            color: 'red',
+                            className: 'popup-on-click', // Añadir la clase para hacer los puntos clicables
+                            marker: {
+                                lineWidth: 1
+                            }
+                        }
+                    ]
+                };
+
+                Highcharts.chart('graficaPower', optionsPotencia);
+            }).fail(function() {
+                alert("Error al obtener los datos. Inténtalo de nuevo.");
+            });
+        });
+    });
+</script>
+</body>
+</html>
+
