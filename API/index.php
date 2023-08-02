@@ -21,7 +21,10 @@ if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
 
 //$power = calcular_power();
 function calcular_power(){
-    return  round(100 / mt_rand(1, 100), 2);
+    $num = mt_rand(1, 100);
+    $num_dec=mt_rand(0,99);
+    $aleatorio=$num+$num_dec / 100;
+    return number_format($aleatorio);
 }
 function calcular_energia($power, $energia_anterior) {
     $energia = $energia_anterior + round( ($power * 60), 2);
